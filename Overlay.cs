@@ -16,14 +16,36 @@ namespace EDtoolset
         private Point dragFormPoint;
 
         private string jumpsText = "Jumps: -";
-        private List<string> starLines = new List<string>();
+        private readonly List<string> starLines = new List<string>();
 
-        private readonly string navRoutePath = Path.Combine(
+        private const int MaxStarsShown = 5;
+
+        private readonly string eliteFolderPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            @"Saved Games\Frontier Developments\Elite Dangerous\NavRoute.json");
+            @"Saved Games\Frontier Developments\Elite Dangerous");
+
+        private readonly string navRoutePath;
+
+        private string currentSystem = "";
+        private long? currentSystemAddress = null;
+
+        private string currentJournalFile = "";
+        private long currentJournalPosition = 0;
+
+        private DateTime lastNavRouteWriteUtc = DateTime.MinValue;
+        private readonly List<RouteEntry> routeEntries = new List<RouteEntry>();
+
+        private sealed class RouteEntry
+        {
+            public string StarSystem { get; set; } = "";
+            public long? SystemAddress { get; set; }
+            public string StarClass { get; set; } = "?";
+        }
 
         public Overlay()
         {
+            navRoutePath = Path.Combine(eliteFolderPath, "NavRoute.json");
+
             TopMost = true;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
@@ -44,11 +66,20 @@ namespace EDtoolset
             DoubleClick += CloseOverlay;
 
             timer = new System.Windows.Forms.Timer();
-            timer.Interval = 2000;
-            timer.Tick += (s, e) => UpdateRouteInfo();
+            timer.Interval = 1000;
+            timer.Tick += (s, e) => RefreshOverlay();
             timer.Start();
 
-            UpdateRouteInfo();
+            InitializeJournalReader();
+            LoadNavRouteIfChanged(force: true);
+            RefreshOverlay();
+        }
+
+        private void RefreshOverlay()
+        {
+            ReadJournalIncremental();
+            LoadNavRouteIfChanged(force: false);
+            UpdateOverlayText();
         }
 
         private void CloseOverlay(object? sender, EventArgs e)
@@ -81,27 +112,166 @@ namespace EDtoolset
         private bool IsScoopable(string starClass)
         {
             string sc = (starClass ?? "").ToUpperInvariant();
-            return sc.StartsWith("O") ||
-                   sc.StartsWith("B") ||
-                   sc.StartsWith("A") ||
-                   sc.StartsWith("F") ||
+            return sc.StartsWith("K") ||
                    sc.StartsWith("G") ||
-                   sc.StartsWith("K") ||
+                   sc.StartsWith("B") ||
+                   sc.StartsWith("F") ||
+                   sc.StartsWith("O") ||
+                   sc.StartsWith("A") ||
                    sc.StartsWith("M");
         }
 
-        private void UpdateRouteInfo()
+        private void InitializeJournalReader()
+        {
+            try
+            {
+                if (!Directory.Exists(eliteFolderPath))
+                    return;
+
+                string[] journalFiles = Directory.GetFiles(eliteFolderPath, "Journal.*.log");
+                if (journalFiles.Length == 0)
+                    return;
+
+                Array.Sort(journalFiles, StringComparer.Ordinal);
+                currentJournalFile = journalFiles[journalFiles.Length - 1];
+                currentJournalPosition = 0;
+
+                ReadJournalFull(currentJournalFile);
+                currentJournalPosition = new FileInfo(currentJournalFile).Length;
+            }
+            catch
+            {
+                currentJournalFile = "";
+                currentJournalPosition = 0;
+            }
+        }
+
+        private void ReadJournalIncremental()
+        {
+            try
+            {
+                if (!Directory.Exists(eliteFolderPath))
+                    return;
+
+                string[] journalFiles = Directory.GetFiles(eliteFolderPath, "Journal.*.log");
+                if (journalFiles.Length == 0)
+                    return;
+
+                Array.Sort(journalFiles, StringComparer.Ordinal);
+                string newestJournal = journalFiles[journalFiles.Length - 1];
+
+                if (!string.Equals(newestJournal, currentJournalFile, StringComparison.OrdinalIgnoreCase))
+                {
+                    currentJournalFile = newestJournal;
+                    currentJournalPosition = 0;
+                }
+
+                if (!File.Exists(currentJournalFile))
+                    return;
+
+                using FileStream fs = new FileStream(
+                    currentJournalFile,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite);
+
+                if (currentJournalPosition > fs.Length)
+                    currentJournalPosition = 0;
+
+                fs.Seek(currentJournalPosition, SeekOrigin.Begin);
+
+                using StreamReader reader = new StreamReader(fs);
+                while (!reader.EndOfStream)
+                {
+                    string? line = reader.ReadLine();
+                    if (!string.IsNullOrWhiteSpace(line))
+                        ProcessJournalLine(line);
+                }
+
+                currentJournalPosition = fs.Position;
+            }
+            catch
+            {
+                // ignorieren
+            }
+        }
+
+        private void ReadJournalFull(string journalFile)
+        {
+            try
+            {
+                using FileStream fs = new FileStream(
+                    journalFile,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite);
+
+                using StreamReader reader = new StreamReader(fs);
+                while (!reader.EndOfStream)
+                {
+                    string? line = reader.ReadLine();
+                    if (!string.IsNullOrWhiteSpace(line))
+                        ProcessJournalLine(line);
+                }
+            }
+            catch
+            {
+                // ignorieren
+            }
+        }
+
+        private void ProcessJournalLine(string line)
+        {
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(line);
+                JsonElement root = doc.RootElement;
+
+                if (!root.TryGetProperty("event", out JsonElement eventElement))
+                    return;
+
+                string? eventName = eventElement.GetString();
+                if (string.IsNullOrWhiteSpace(eventName))
+                    return;
+
+                if (eventName == "Location" || eventName == "FSDJump")
+                {
+                    if (root.TryGetProperty("StarSystem", out JsonElement systemElement))
+                        currentSystem = systemElement.GetString() ?? "";
+                    else
+                        currentSystem = "";
+
+                    if (root.TryGetProperty("SystemAddress", out JsonElement addressElement) &&
+                        addressElement.ValueKind == JsonValueKind.Number)
+                        currentSystemAddress = addressElement.GetInt64();
+                    else
+                        currentSystemAddress = null;
+                }
+                else if (eventName == "NavRoute")
+                {
+                    LoadNavRouteIfChanged(force: true);
+                }
+            }
+            catch
+            {
+                // defekte Zeile ignorieren
+            }
+        }
+
+        private void LoadNavRouteIfChanged(bool force)
         {
             try
             {
                 if (!File.Exists(navRoutePath))
                 {
-                    jumpsText = "Jumps: -";
-                    starLines.Clear();
-                    Height = 40;
-                    Invalidate();
+                    routeEntries.Clear();
+                    lastNavRouteWriteUtc = DateTime.MinValue;
                     return;
                 }
+
+                DateTime writeUtc = File.GetLastWriteTimeUtc(navRoutePath);
+                if (!force && writeUtc == lastNavRouteWriteUtc)
+                    return;
 
                 string json = File.ReadAllText(navRoutePath);
                 using JsonDocument doc = JsonDocument.Parse(json);
@@ -109,37 +279,111 @@ namespace EDtoolset
                 if (!doc.RootElement.TryGetProperty("Route", out JsonElement route) ||
                     route.ValueKind != JsonValueKind.Array)
                 {
+                    routeEntries.Clear();
+                    lastNavRouteWriteUtc = writeUtc;
+                    return;
+                }
+
+                routeEntries.Clear();
+
+                foreach (JsonElement entry in route.EnumerateArray())
+                {
+                    RouteEntry routeEntry = new RouteEntry();
+
+                    if (entry.TryGetProperty("StarSystem", out JsonElement systemElement))
+                        routeEntry.StarSystem = systemElement.GetString() ?? "";
+
+                    if (entry.TryGetProperty("SystemAddress", out JsonElement addressElement) &&
+                        addressElement.ValueKind == JsonValueKind.Number)
+                        routeEntry.SystemAddress = addressElement.GetInt64();
+
+                    if (entry.TryGetProperty("StarClass", out JsonElement starClassElement))
+                        routeEntry.StarClass = starClassElement.GetString() ?? "?";
+
+                    routeEntries.Add(routeEntry);
+                }
+
+                lastNavRouteWriteUtc = writeUtc;
+            }
+            catch
+            {
+                routeEntries.Clear();
+            }
+        }
+
+        private int FindCurrentRouteIndex()
+        {
+            if (routeEntries.Count == 0)
+                return -1;
+
+            if (currentSystemAddress.HasValue)
+            {
+                for (int i = 0; i < routeEntries.Count; i++)
+                {
+                    if (routeEntries[i].SystemAddress.HasValue &&
+                        routeEntries[i].SystemAddress.Value == currentSystemAddress.Value)
+                        return i;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(currentSystem))
+            {
+                for (int i = 0; i < routeEntries.Count; i++)
+                {
+                    if (string.Equals(routeEntries[i].StarSystem, currentSystem, StringComparison.OrdinalIgnoreCase))
+                        return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private void UpdateOverlayText()
+        {
+            try
+            {
+                starLines.Clear();
+
+                if (routeEntries.Count == 0)
+                {
                     jumpsText = "Jumps: -";
-                    starLines.Clear();
                     Height = 40;
                     Invalidate();
                     return;
                 }
 
-                int routeCount = route.GetArrayLength();
-                int jumpsRemaining = Math.Max(0, routeCount - 1);
-                jumpsText = $"Jumps: {jumpsRemaining}";
+                int currentIndex = FindCurrentRouteIndex();
 
-                starLines.Clear();
-
-                // Hier weird die Anzahl an Sternen zur Anzeige festgelegt
-                // Alle
-                // for (int i = 1; i < routeCount; i++) 
-                for (int i = 1; i < Math.Min(routeCount, 6); i++)
+                if (currentIndex < 0)
                 {
-                    JsonElement entry = route[i];
-                    string starClass = "?";
+                    jumpsText = "Jumps: ?";
+                    int previewCount = Math.Min(routeEntries.Count, MaxStarsShown);
 
-                    if (entry.TryGetProperty("StarClass", out JsonElement starClassElement))
+                    for (int i = 0; i < previewCount; i++)
                     {
-                        starClass = starClassElement.GetString() ?? "?";
+                        string marker = IsScoopable(routeEntries[i].StarClass) ? " •" : "";
+                        starLines.Add($"{i + 1}. {routeEntries[i].StarClass}{marker}");
                     }
 
-                    string marker = IsScoopable(starClass) ? " •" : "";
-                    starLines.Add($"{i}. {starClass}{marker}");
+                    Height = Math.Max(40, 28 + ((starLines.Count + 3) * 16) + 8);
+                    Invalidate();
+                    return;
                 }
 
-                Height = Math.Max(40, 28 + (starLines.Count * 16) + 8);
+                int jumpsRemaining = Math.Max(0, routeEntries.Count - currentIndex - 1);
+                jumpsText = $"Jumps: {jumpsRemaining}";
+
+                int firstNextJumpIndex = currentIndex + 1;
+                int lastIndexExclusive = Math.Min(routeEntries.Count, firstNextJumpIndex + MaxStarsShown);
+
+                for (int i = firstNextJumpIndex; i < lastIndexExclusive; i++)
+                {
+                    string marker = IsScoopable(routeEntries[i].StarClass) ? " •" : "";
+                    int displayNumber = i - firstNextJumpIndex + 1;
+                    starLines.Add($"{displayNumber}. {routeEntries[i].StarClass}{marker}");
+                }
+
+                Height = Math.Max(40, 28 + ((starLines.Count + 3) * 16) + 8);
             }
             catch
             {
@@ -170,6 +414,21 @@ namespace EDtoolset
             {
                 e.Graphics.DrawString(line, listFont, brush, 4f, y);
                 y += 15f;
+            }
+        }
+
+        private string GetRouteAddressText()
+        {
+            try
+            {
+                if (routeEntries.Count == 0 || !routeEntries[0].SystemAddress.HasValue)
+                    return "-";
+
+                return routeEntries[0].SystemAddress.Value.ToString();
+            }
+            catch
+            {
+                return "err";
             }
         }
     }

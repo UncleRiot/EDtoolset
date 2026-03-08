@@ -1,25 +1,37 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <UseWindowsForms>true</UseWindowsForms>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationIcon>favicon.ico</ApplicationIcon>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<ApplicationIcon>favicon.ico</ApplicationIcon>
 
-  <ItemGroup>
-    <Content Include="favicon.ico" />
-  </ItemGroup>
+		<AssemblyTitle>EDtoolset Overlay</AssemblyTitle>
+		<Product>EDtoolset</Product>
+		<Company>Onkel Amok / Uncle Riot</Company>
+		<Authors>Onkel Amok / Uncle Riot</Authors>
+		<Description>Overlay für Elite Dangerous</Description>
+		<Copyright>© Onkel Amok / Uncle Riot</Copyright>
 
-  <ItemGroup>
-    <Compile Update="Overlay.cs">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Compile>
-    <Compile Update="Program.cs">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Compile>
-  </ItemGroup>
+		<Version>0.0.0.2</Version>
+		<AssemblyVersion>0.0.0.2</AssemblyVersion>
+		<FileVersion>0.0.0.2</FileVersion>
+		<InformationalVersion>0.0.0.2</InformationalVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Content Include="favicon.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Update="Overlay.cs">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Compile>
+		<Compile Update="Program.cs">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Compile>
+	</ItemGroup>
 
 </Project>
