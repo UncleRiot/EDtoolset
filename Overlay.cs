@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Forms;
 
@@ -19,6 +21,8 @@ namespace EDtoolset
         private readonly List<string> starLines = new List<string>();
 
         private const int MaxStarsShown = 5;
+        private const int MinFontSize = 10;
+        private const int MaxFontSize = 24;
 
         private readonly string eliteFolderPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -34,6 +38,11 @@ namespace EDtoolset
 
         private DateTime lastNavRouteWriteUtc = DateTime.MinValue;
         private readonly List<RouteEntry> routeEntries = new List<RouteEntry>();
+
+        private readonly ContextMenuStrip overlayMenu;
+
+        private int fontSize = 11;
+        private int backgroundOpacityPercent = 0; // 0 = transparent, 100 = voll deckend
 
         private sealed class RouteEntry
         {
@@ -53,16 +62,20 @@ namespace EDtoolset
             Width = 190;
             Height = 110;
             DoubleBuffered = true;
-
             ShowInTaskbar = true;
+
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
-            BackColor = Color.Lime;
-            TransparencyKey = Color.Lime;
+            BackColor = Color.Black;
+            TransparencyKey = Color.Empty;
+
+            overlayMenu = new ContextMenuStrip();
+            overlayMenu.Items.Add("Config", null, OpenConfig);
+            overlayMenu.Items.Add("Exit", null, CloseOverlay);
 
             MouseDown += StartDrag;
             MouseMove += DoDrag;
-            MouseUp += EndDrag;
+            MouseUp += EndDragOrMenu;
             DoubleClick += CloseOverlay;
 
             timer = new System.Windows.Forms.Timer();
@@ -73,6 +86,39 @@ namespace EDtoolset
             InitializeJournalReader();
             LoadNavRouteIfChanged(force: true);
             RefreshOverlay();
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= NativeMethods.WS_EX_LAYERED;
+                return cp;
+            }
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            RenderLayered();
+        }
+
+        protected override void OnLocationChanged(EventArgs e)
+        {
+            base.OnLocationChanged(e);
+            RenderLayered();
+        }
+
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            RenderLayered();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            // Zeichnen erfolgt komplett über UpdateLayeredWindow
         }
 
         private void RefreshOverlay()
@@ -89,7 +135,8 @@ namespace EDtoolset
 
         private void StartDrag(object? sender, MouseEventArgs e)
         {
-            if (e.Button != MouseButtons.Left) return;
+            if (e.Button != MouseButtons.Left)
+                return;
 
             dragging = true;
             dragCursorPoint = Cursor.Position;
@@ -98,15 +145,152 @@ namespace EDtoolset
 
         private void DoDrag(object? sender, MouseEventArgs e)
         {
-            if (!dragging) return;
+            if (!dragging)
+                return;
 
             Point diff = Point.Subtract(Cursor.Position, new Size(dragCursorPoint));
             Location = Point.Add(dragFormPoint, new Size(diff));
         }
 
-        private void EndDrag(object? sender, MouseEventArgs e)
+        private void EndDragOrMenu(object? sender, MouseEventArgs e)
         {
-            dragging = false;
+            if (e.Button == MouseButtons.Left)
+            {
+                dragging = false;
+                return;
+            }
+
+            if (e.Button == MouseButtons.Right)
+            {
+                overlayMenu.Show(this, e.Location);
+            }
+        }
+
+        private void OpenConfig(object? sender, EventArgs e)
+        {
+            int originalFontSize = fontSize;
+            int originalBackgroundOpacityPercent = backgroundOpacityPercent;
+
+            using Form configForm = new Form();
+            configForm.Text = "Config";
+            configForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+            configForm.StartPosition = FormStartPosition.Manual;
+            configForm.ClientSize = new Size(290, 125);
+            configForm.MaximizeBox = false;
+            configForm.MinimizeBox = false;
+            configForm.ShowInTaskbar = false;
+            configForm.AutoScaleMode = AutoScaleMode.Font;
+
+            int configX = Right + 12;
+            int configY = Top;
+            configForm.Location = new Point(configX, configY);
+
+            Label fontLabel = new Label
+            {
+                Text = "Fontsize",
+                Left = 12,
+                Top = 16,
+                Width = 100
+            };
+
+            NumericUpDown fontUpDown = new NumericUpDown
+            {
+                Left = 140,
+                Top = 13,
+                Width = 120,
+                Minimum = MinFontSize,
+                Maximum = MaxFontSize,
+                Value = fontSize
+            };
+
+            fontUpDown.ValueChanged += (s, args) =>
+            {
+                fontSize = (int)fontUpDown.Value;
+                UpdateOverlayText();
+            };
+
+            Label bgLabel = new Label
+            {
+                Text = "Background (%)",
+                Left = 12,
+                Top = 50,
+                Width = 110
+            };
+
+            TrackBar bgTrackBar = new TrackBar
+            {
+                Left = 140,
+                Top = 42,
+                Width = 90,
+                Height = 28,
+                Minimum = 0,
+                Maximum = 100,
+                TickFrequency = 10,
+                SmallChange = 1,
+                LargeChange = 10,
+                Value = Math.Max(0, Math.Min(100, backgroundOpacityPercent))
+            };
+
+            Label bgValueLabel = new Label
+            {
+                Text = $"{bgTrackBar.Value}%",
+                Left = 235,
+                Top = 50,
+                Width = 35
+            };
+
+            bgTrackBar.ValueChanged += (s, args) =>
+            {
+                backgroundOpacityPercent = bgTrackBar.Value;
+                bgValueLabel.Text = $"{bgTrackBar.Value}%";
+                RenderLayered();
+            };
+
+            Button okButton = new Button
+            {
+                Text = "OK",
+                Left = 104,
+                Top = 84,
+                Width = 75,
+                Height = 26,
+                DialogResult = DialogResult.OK
+            };
+
+            Button cancelButton = new Button
+            {
+                Text = "Cancel",
+                Left = 185,
+                Top = 84,
+                Width = 75,
+                Height = 26,
+                DialogResult = DialogResult.Cancel
+            };
+
+            configForm.Controls.Add(fontLabel);
+            configForm.Controls.Add(fontUpDown);
+            configForm.Controls.Add(bgLabel);
+            configForm.Controls.Add(bgTrackBar);
+            configForm.Controls.Add(bgValueLabel);
+            configForm.Controls.Add(okButton);
+            configForm.Controls.Add(cancelButton);
+
+            configForm.AcceptButton = okButton;
+            configForm.CancelButton = cancelButton;
+
+            DialogResult result = configForm.ShowDialog();
+
+            if (result == DialogResult.OK)
+            {
+                fontSize = (int)fontUpDown.Value;
+                backgroundOpacityPercent = bgTrackBar.Value;
+                UpdateOverlayText();
+            }
+            else
+            {
+                fontSize = originalFontSize;
+                backgroundOpacityPercent = originalBackgroundOpacityPercent;
+                UpdateOverlayText();
+            }
         }
 
         private bool IsScoopable(string starClass)
@@ -338,6 +522,11 @@ namespace EDtoolset
             return -1;
         }
 
+        private int GetLineHeight()
+        {
+            return Math.Max(15, fontSize + 4);
+        }
+
         private void UpdateOverlayText()
         {
             try
@@ -348,7 +537,7 @@ namespace EDtoolset
                 {
                     jumpsText = "Jumps: -";
                     Height = 40;
-                    Invalidate();
+                    RenderLayered();
                     return;
                 }
 
@@ -365,8 +554,8 @@ namespace EDtoolset
                         starLines.Add($"{i + 1}. {routeEntries[i].StarClass}{marker}");
                     }
 
-                    Height = Math.Max(40, 28 + ((starLines.Count + 3) * 16) + 8);
-                    Invalidate();
+                    Height = Math.Max(40, 28 + ((starLines.Count + 3) * GetLineHeight()) + 8);
+                    RenderLayered();
                     return;
                 }
 
@@ -383,7 +572,7 @@ namespace EDtoolset
                     starLines.Add($"{displayNumber}. {routeEntries[i].StarClass}{marker}");
                 }
 
-                Height = Math.Max(40, 28 + ((starLines.Count + 3) * 16) + 8);
+                Height = Math.Max(40, 28 + ((starLines.Count + 3) * GetLineHeight()) + 8);
             }
             catch
             {
@@ -392,28 +581,91 @@ namespace EDtoolset
                 Height = 40;
             }
 
-            Invalidate();
+            RenderLayered();
         }
 
-        protected override void OnPaint(PaintEventArgs e)
+        private void RenderLayered()
         {
-            base.OnPaint(e);
+            if (!IsHandleCreated || Width <= 0 || Height <= 0)
+                return;
 
-            e.Graphics.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
+            using Bitmap bitmap = new Bitmap(Width, Height, PixelFormat.Format32bppArgb);
+            using Graphics g = Graphics.FromImage(bitmap);
 
-            using Brush brush = new SolidBrush(Color.FromArgb(220, 110, 0));
-            using Font jumpsFont = new Font("Segoe UI", 11, FontStyle.Bold);
-            using Font listFont = new Font("Segoe UI", 9, FontStyle.Regular);
+            g.Clear(Color.Transparent);
+            g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
+
+            int backgroundAlpha = (int)Math.Round(255.0 * backgroundOpacityPercent / 100.0);
+
+            if (backgroundAlpha > 0)
+            {
+                using Brush backgroundBrush = new SolidBrush(Color.FromArgb(backgroundAlpha, 0, 0, 0));
+                g.FillRectangle(backgroundBrush, ClientRectangle);
+            }
+
+            using Brush textBrush = new SolidBrush(Color.FromArgb(255, 220, 110, 0));
+            using Font jumpsFont = new Font("Segoe UI", fontSize, FontStyle.Bold);
+            using Font listFont = new Font("Segoe UI", Math.Max(8, fontSize - 2), FontStyle.Regular);
 
             float y = 2f;
-            e.Graphics.DrawString(jumpsText, jumpsFont, brush, 4f, y);
+            g.DrawString(jumpsText, jumpsFont, textBrush, 4f, y);
 
-            y += 18f;
+            y += fontSize + 7f;
 
             foreach (string line in starLines)
             {
-                e.Graphics.DrawString(line, listFont, brush, 4f, y);
-                y += 15f;
+                g.DrawString(line, listFont, textBrush, 4f, y);
+                y += GetLineHeight();
+            }
+
+            ApplyBitmap(bitmap);
+        }
+
+        private void ApplyBitmap(Bitmap bitmap)
+        {
+            IntPtr screenDc = NativeMethods.GetDC(IntPtr.Zero);
+            IntPtr memDc = NativeMethods.CreateCompatibleDC(screenDc);
+            IntPtr hBitmap = IntPtr.Zero;
+            IntPtr oldBitmap = IntPtr.Zero;
+
+            try
+            {
+                hBitmap = bitmap.GetHbitmap(Color.FromArgb(0));
+                oldBitmap = NativeMethods.SelectObject(memDc, hBitmap);
+
+                NativeMethods.SIZE size = new NativeMethods.SIZE(bitmap.Width, bitmap.Height);
+                NativeMethods.POINT sourcePoint = new NativeMethods.POINT(0, 0);
+                NativeMethods.POINT topPos = new NativeMethods.POINT(Left, Top);
+
+                NativeMethods.BLENDFUNCTION blend = new NativeMethods.BLENDFUNCTION
+                {
+                    BlendOp = NativeMethods.AC_SRC_OVER,
+                    BlendFlags = 0,
+                    SourceConstantAlpha = 255,
+                    AlphaFormat = NativeMethods.AC_SRC_ALPHA
+                };
+
+                NativeMethods.UpdateLayeredWindow(
+                    Handle,
+                    screenDc,
+                    ref topPos,
+                    ref size,
+                    memDc,
+                    ref sourcePoint,
+                    0,
+                    ref blend,
+                    NativeMethods.ULW_ALPHA);
+            }
+            finally
+            {
+                if (oldBitmap != IntPtr.Zero)
+                    NativeMethods.SelectObject(memDc, oldBitmap);
+
+                if (hBitmap != IntPtr.Zero)
+                    NativeMethods.DeleteObject(hBitmap);
+
+                NativeMethods.DeleteDC(memDc);
+                NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
             }
         }
 
@@ -430,6 +682,79 @@ namespace EDtoolset
             {
                 return "err";
             }
+        }
+
+        private static class NativeMethods
+        {
+            public const int WS_EX_LAYERED = 0x00080000;
+            public const int ULW_ALPHA = 0x00000002;
+            public const byte AC_SRC_OVER = 0x00;
+            public const byte AC_SRC_ALPHA = 0x01;
+
+            [StructLayout(LayoutKind.Sequential)]
+            public struct POINT
+            {
+                public int X;
+                public int Y;
+
+                public POINT(int x, int y)
+                {
+                    X = x;
+                    Y = y;
+                }
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            public struct SIZE
+            {
+                public int cx;
+                public int cy;
+
+                public SIZE(int cx, int cy)
+                {
+                    this.cx = cx;
+                    this.cy = cy;
+                }
+            }
+
+            [StructLayout(LayoutKind.Sequential, Pack = 1)]
+            public struct BLENDFUNCTION
+            {
+                public byte BlendOp;
+                public byte BlendFlags;
+                public byte SourceConstantAlpha;
+                public byte AlphaFormat;
+            }
+
+            [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+            public static extern IntPtr GetDC(IntPtr hWnd);
+
+            [DllImport("user32.dll", ExactSpelling = true)]
+            public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDc);
+
+            [DllImport("gdi32.dll", ExactSpelling = true, SetLastError = true)]
+            public static extern IntPtr CreateCompatibleDC(IntPtr hDc);
+
+            [DllImport("gdi32.dll", ExactSpelling = true)]
+            public static extern bool DeleteDC(IntPtr hDc);
+
+            [DllImport("gdi32.dll", ExactSpelling = true)]
+            public static extern IntPtr SelectObject(IntPtr hDc, IntPtr hObject);
+
+            [DllImport("gdi32.dll", ExactSpelling = true, SetLastError = true)]
+            public static extern bool DeleteObject(IntPtr hObject);
+
+            [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+            public static extern bool UpdateLayeredWindow(
+                IntPtr hwnd,
+                IntPtr hdcDst,
+                ref POINT pptDst,
+                ref SIZE psize,
+                IntPtr hdcSrc,
+                ref POINT pprSrc,
+                int crKey,
+                ref BLENDFUNCTION pblend,
+                int dwFlags);
         }
     }
 }
