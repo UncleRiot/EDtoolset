@@ -29,6 +29,7 @@ namespace EDtoolset
             @"Saved Games\Frontier Developments\Elite Dangerous");
 
         private readonly string navRoutePath;
+        private readonly string settingsFilePath = Path.Combine(AppContext.BaseDirectory, "overlay.config.json");
 
         private string currentSystem = "";
         private long? currentSystemAddress = null;
@@ -51,6 +52,14 @@ namespace EDtoolset
             public string StarClass { get; set; } = "?";
         }
 
+        private sealed class OverlaySettings
+        {
+            public int FontSize { get; set; } = 11;
+            public int BackgroundOpacityPercent { get; set; } = 0;
+            public int LocationX { get; set; } = 50;
+            public int LocationY { get; set; } = 50;
+        }
+
         public Overlay()
         {
             navRoutePath = Path.Combine(eliteFolderPath, "NavRoute.json");
@@ -69,6 +78,8 @@ namespace EDtoolset
             BackColor = Color.Black;
             TransparencyKey = Color.Empty;
 
+            LoadSettings();
+
             overlayMenu = new ContextMenuStrip();
             overlayMenu.Items.Add("Config", null, OpenConfig);
             overlayMenu.Items.Add("Exit", null, CloseOverlay);
@@ -77,6 +88,7 @@ namespace EDtoolset
             MouseMove += DoDrag;
             MouseUp += EndDragOrMenu;
             DoubleClick += CloseOverlay;
+            FormClosing += Overlay_FormClosing;
 
             timer = new System.Windows.Forms.Timer();
             timer.Interval = 1000;
@@ -121,6 +133,11 @@ namespace EDtoolset
             // Zeichnen erfolgt komplett über UpdateLayeredWindow
         }
 
+        private void Overlay_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            SaveSettingsSafe();
+        }
+
         private void RefreshOverlay()
         {
             ReadJournalIncremental();
@@ -157,6 +174,7 @@ namespace EDtoolset
             if (e.Button == MouseButtons.Left)
             {
                 dragging = false;
+                SaveSettingsSafe();
                 return;
             }
 
@@ -175,7 +193,7 @@ namespace EDtoolset
             configForm.Text = "Config";
             configForm.FormBorderStyle = FormBorderStyle.FixedDialog;
             configForm.StartPosition = FormStartPosition.Manual;
-            configForm.ClientSize = new Size(290, 125);
+            configForm.ClientSize = new Size(290, 155);
             configForm.MaximizeBox = false;
             configForm.MinimizeBox = false;
             configForm.ShowInTaskbar = false;
@@ -213,16 +231,17 @@ namespace EDtoolset
             {
                 Text = "Background (%)",
                 Left = 12,
-                Top = 50,
+                Top = 54,
                 Width = 110
             };
 
             TrackBar bgTrackBar = new TrackBar
             {
                 Left = 140,
-                Top = 42,
+                Top = 48,
                 Width = 90,
-                Height = 28,
+                Height = 24,
+                AutoSize = false,
                 Minimum = 0,
                 Maximum = 100,
                 TickFrequency = 10,
@@ -235,7 +254,7 @@ namespace EDtoolset
             {
                 Text = $"{bgTrackBar.Value}%",
                 Left = 235,
-                Top = 50,
+                Top = 54,
                 Width = 35
             };
 
@@ -250,7 +269,7 @@ namespace EDtoolset
             {
                 Text = "OK",
                 Left = 104,
-                Top = 84,
+                Top = 108,
                 Width = 75,
                 Height = 26,
                 DialogResult = DialogResult.OK
@@ -260,7 +279,7 @@ namespace EDtoolset
             {
                 Text = "Cancel",
                 Left = 185,
-                Top = 84,
+                Top = 108,
                 Width = 75,
                 Height = 26,
                 DialogResult = DialogResult.Cancel
@@ -283,6 +302,7 @@ namespace EDtoolset
             {
                 fontSize = (int)fontUpDown.Value;
                 backgroundOpacityPercent = bgTrackBar.Value;
+                SaveSettingsSafe();
                 UpdateOverlayText();
             }
             else
@@ -291,6 +311,62 @@ namespace EDtoolset
                 backgroundOpacityPercent = originalBackgroundOpacityPercent;
                 UpdateOverlayText();
             }
+        }
+
+        private void LoadSettings()
+        {
+            try
+            {
+                if (!File.Exists(settingsFilePath))
+                    return;
+
+                string json = File.ReadAllText(settingsFilePath);
+                OverlaySettings? settings = JsonSerializer.Deserialize<OverlaySettings>(json);
+
+                if (settings == null)
+                    return;
+
+                fontSize = Math.Max(MinFontSize, Math.Min(MaxFontSize, settings.FontSize));
+                backgroundOpacityPercent = Math.Max(0, Math.Min(100, settings.BackgroundOpacityPercent));
+                Location = new Point(settings.LocationX, settings.LocationY);
+            }
+            catch
+            {
+                fontSize = 11;
+                backgroundOpacityPercent = 0;
+                Location = new Point(50, 50);
+            }
+        }
+
+        private void SaveSettingsSafe()
+        {
+            try
+            {
+                SaveSettings();
+            }
+            catch
+            {
+                // absichtlich ignorieren
+            }
+        }
+
+        private void SaveSettings()
+        {
+            OverlaySettings settings = new OverlaySettings
+            {
+                FontSize = fontSize,
+                BackgroundOpacityPercent = backgroundOpacityPercent,
+                LocationX = Left,
+                LocationY = Top
+            };
+
+            JsonSerializerOptions options = new JsonSerializerOptions
+            {
+                WriteIndented = true
+            };
+
+            string json = JsonSerializer.Serialize(settings, options);
+            File.WriteAllText(settingsFilePath, json);
         }
 
         private bool IsScoopable(string starClass)
@@ -550,11 +626,11 @@ namespace EDtoolset
 
                     for (int i = 0; i < previewCount; i++)
                     {
-                        string marker = IsScoopable(routeEntries[i].StarClass) ? " •" : "";
+                        string marker = IsScoopable(routeEntries[i].StarClass) ? " ⬥" : "";
                         starLines.Add($"{i + 1}. {routeEntries[i].StarClass}{marker}");
                     }
 
-                    Height = Math.Max(40, 28 + ((starLines.Count + 3) * GetLineHeight()) + 8);
+                    Height = Math.Max(40, 28 + ((starLines.Count + 2) * GetLineHeight()));
                     RenderLayered();
                     return;
                 }
@@ -567,12 +643,12 @@ namespace EDtoolset
 
                 for (int i = firstNextJumpIndex; i < lastIndexExclusive; i++)
                 {
-                    string marker = IsScoopable(routeEntries[i].StarClass) ? " •" : "";
+                    string marker = IsScoopable(routeEntries[i].StarClass) ? " ⬥" : "";
                     int displayNumber = i - firstNextJumpIndex + 1;
                     starLines.Add($"{displayNumber}. {routeEntries[i].StarClass}{marker}");
                 }
 
-                Height = Math.Max(40, 28 + ((starLines.Count + 3) * GetLineHeight()) + 8);
+                Height = Math.Max(40, 28 + ((starLines.Count + 2) * GetLineHeight()));
             }
             catch
             {
@@ -604,19 +680,33 @@ namespace EDtoolset
             }
 
             using Brush textBrush = new SolidBrush(Color.FromArgb(255, 220, 110, 0));
+            using Brush markerBrush = new SolidBrush(Color.FromArgb(255, 70, 140, 255));
             using Font jumpsFont = new Font("Segoe UI", fontSize, FontStyle.Bold);
             using Font listFont = new Font("Segoe UI", Math.Max(8, fontSize - 2), FontStyle.Regular);
 
             float y = 2f;
             g.DrawString(jumpsText, jumpsFont, textBrush, 4f, y);
 
-            y += fontSize + 7f;
+            y += fontSize + 16f;
 
             foreach (string line in starLines)
-            {
-                g.DrawString(line, listFont, textBrush, 4f, y);
-                y += GetLineHeight();
-            }
+{
+    if (line.EndsWith("⬥"))
+    {
+        string text = line.Replace(" ⬥", "");
+
+        g.DrawString(text, listFont, textBrush, 4f, y);
+
+        SizeF size = g.MeasureString(text, listFont);
+        g.DrawString(" ⬥", listFont, markerBrush, 4f + size.Width, y);
+    }
+    else
+    {
+        g.DrawString(line, listFont, textBrush, 4f, y);
+    }
+
+    y += GetLineHeight();
+}
 
             ApplyBitmap(bitmap);
         }
