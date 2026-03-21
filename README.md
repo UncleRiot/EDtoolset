@@ -22,8 +22,7 @@ Lightweight overlay tool for **Elite Dangerous** displaying navigation data dire
 
   * Double-click
   * Right-click
-
-Source: https://forums.frontier.co.uk/threads/scoopable-stars-jump-counter.646101/
+    Source: https://forums.frontier.co.uk/threads/scoopable-stars-jump-counter.646101/
 
 ---
 
@@ -31,8 +30,6 @@ Source: https://forums.frontier.co.uk/threads/scoopable-stars-jump-counter.64610
 
 * Windows
 * **.NET 8 Runtime**
-
-Source: User info + repository (runtime version not explicitly documented → partially inferred)
 
 ---
 
@@ -54,8 +51,7 @@ Source: User info + repository (runtime version not explicitly documented → pa
 * **Right-click** → settings
 * **Drag & drop** → reposition
 * **Double-click** → exit
-
-Source: https://forum.stellanebula.de/viewtopic.php?t=1530
+  Source: https://forum.stellanebula.de/viewtopic.php?t=1530
 
 ---
 
@@ -64,8 +60,7 @@ Source: https://forum.stellanebula.de/viewtopic.php?t=1530
 * `Program.cs` → entry point
 * `Overlay.cs` → overlay logic
 * `Form1.cs` → UI / settings
-
-Source: https://github.com/UncleRiot/EDtoolset
+  Source: https://github.com/UncleRiot/EDtoolset
 
 ---
 
@@ -73,8 +68,7 @@ Source: https://github.com/UncleRiot/EDtoolset
 
 * Experimental / limited testing
 * Antivirus may flag false positives
-
-Source: https://forum.stellanebula.de/viewtopic.php?t=1530
+  Source: https://forum.stellanebula.de/viewtopic.php?t=1530
 
 ---
 
@@ -97,5 +91,4 @@ Created to:
 
 * avoid switching to in-game menus
 * quickly identify scoopable stars
-
-Source: https://forums.frontier.co.uk/threads/scoopable-stars-jump-counter.646101/
+  Source: https://forums.frontier.co.uk/threads/scoopable-stars-jump-counter.646101/
