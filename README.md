@@ -4,6 +4,10 @@ Lightweight overlay tool for **Elite Dangerous** displaying navigation data dire
 
 ---
 
+<img width="252" height="183" alt="grafik" src="https://github.com/user-attachments/assets/7889ab7c-4964-40ce-8abf-d7178678159a" />
+
+---
+
 ## ✨ Features
 
 * Remaining **jump count**
