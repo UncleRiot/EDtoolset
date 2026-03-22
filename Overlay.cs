@@ -44,7 +44,7 @@ namespace EDtoolset
         private readonly ContextMenuStrip overlayMenu;
 
         private int fontSize = 11;
-        private int backgroundOpacityPercent = 0; // 0 = transparent, 100 = voll deckend
+        private int backgroundOpacityPercent = 100; // 0 = transparent, 100 = voll deckend
 
         private readonly PrivateFontCollection privateFonts = new PrivateFontCollection();
         private FontFamily? dosisRegularFamily;
@@ -60,14 +60,11 @@ namespace EDtoolset
         private sealed class OverlaySettings
         {
             public int FontSize { get; set; } = 11;
-            public int BackgroundOpacityPercent { get; set; } = 0;
+            public int BackgroundOpacityPercent { get; set; } = 100;
             public int LocationX { get; set; } = 50;
             public int LocationY { get; set; } = 50;
             public string LayoutMode { get; set; } = "Classic";
-            public int ModernNumberFontSize { get; set; } = 16;
-            public bool ModernNumberBold { get; set; } = true;
             public int ModernSquareSize { get; set; } = 36;
-            public int ModernContentOpacityPercent { get; set; } = 100;
         }
 
         public Overlay()
@@ -200,17 +197,14 @@ namespace EDtoolset
             int originalFontSize = fontSize;
             int originalBackgroundOpacityPercent = backgroundOpacityPercent;
             OverlayLayoutMode originalLayoutMode = overlayLayoutMode;
-            int originalModernNumberFontSize = modernNumberFontSize;
-            bool originalModernNumberBold = modernNumberBold;
             int originalModernSquareSize = modernSquareSize;
-            int originalModernContentOpacityPercent = modernContentOpacityPercent;
             Point originalLocation = Location;
 
             using Form configForm = new Form();
             configForm.Text = "Config";
             configForm.FormBorderStyle = FormBorderStyle.FixedDialog;
             configForm.StartPosition = FormStartPosition.Manual;
-            configForm.ClientSize = new Size(320, 345);
+            configForm.ClientSize = new Size(300, 240);
             configForm.MaximizeBox = false;
             configForm.MinimizeBox = false;
             configForm.ShowInTaskbar = false;
@@ -222,15 +216,15 @@ namespace EDtoolset
 
             Label fontLabel = new Label
             {
-                Text = "Fontsize",
+                Text = "Font Size",
                 Left = 12,
                 Top = 16,
-                Width = 140
+                Width = 120
             };
 
             NumericUpDown fontUpDown = new NumericUpDown
             {
-                Left = 170,
+                Left = 150,
                 Top = 13,
                 Width = 120,
                 Minimum = MinFontSize,
@@ -244,17 +238,17 @@ namespace EDtoolset
                 UpdateOverlayText();
             };
 
-            Label bgLabel = new Label
+            Label opacityLabel = new Label
             {
-                Text = "Background (%)",
+                Text = "Opacity (%)",
                 Left = 12,
                 Top = 54,
-                Width = 140
+                Width = 120
             };
 
-            TrackBar bgTrackBar = new TrackBar
+            TrackBar opacityTrackBar = new TrackBar
             {
-                Left = 170,
+                Left = 150,
                 Top = 48,
                 Width = 90,
                 Height = 24,
@@ -267,18 +261,18 @@ namespace EDtoolset
                 Value = Math.Max(0, Math.Min(100, backgroundOpacityPercent))
             };
 
-            Label bgValueLabel = new Label
+            Label opacityValueLabel = new Label
             {
-                Text = $"{bgTrackBar.Value}%",
-                Left = 265,
+                Text = $"{opacityTrackBar.Value}%",
+                Left = 245,
                 Top = 54,
                 Width = 35
             };
 
-            bgTrackBar.ValueChanged += (s, args) =>
+            opacityTrackBar.ValueChanged += (s, args) =>
             {
-                backgroundOpacityPercent = bgTrackBar.Value;
-                bgValueLabel.Text = $"{bgTrackBar.Value}%";
+                backgroundOpacityPercent = opacityTrackBar.Value;
+                opacityValueLabel.Text = $"{opacityTrackBar.Value}%";
                 RenderLayered();
             };
 
@@ -287,12 +281,12 @@ namespace EDtoolset
                 Text = "Layout",
                 Left = 12,
                 Top = 92,
-                Width = 140
+                Width = 120
             };
 
             ComboBox layoutComboBox = new ComboBox
             {
-                Left = 170,
+                Left = 150,
                 Top = 89,
                 Width = 120,
                 DropDownStyle = ComboBoxStyle.DropDownList
@@ -302,130 +296,35 @@ namespace EDtoolset
             layoutComboBox.Items.Add("Modern");
             layoutComboBox.SelectedItem = GetOverlayLayoutModeText();
 
-            Label modernNumberFontSizeLabel = new Label
+            Label boxSizeLabel = new Label
             {
-                Text = "Modern Zahlgröße",
+                Text = "Box-Size",
                 Left = 12,
                 Top = 130,
-                Width = 140
+                Width = 120
             };
 
-            NumericUpDown modernNumberFontSizeUpDown = new NumericUpDown
+            NumericUpDown boxSizeUpDown = new NumericUpDown
             {
-                Left = 170,
+                Left = 150,
                 Top = 127,
-                Width = 120,
-                Minimum = MinModernNumberFontSize,
-                Maximum = MaxModernNumberFontSize,
-                Value = modernNumberFontSize
-            };
-
-            modernNumberFontSizeUpDown.ValueChanged += (s, args) =>
-            {
-                modernNumberFontSize = NormalizeModernNumberFontSize((int)modernNumberFontSizeUpDown.Value);
-                UpdateOverlayText();
-            };
-
-            Label modernNumberStyleLabel = new Label
-            {
-                Text = "Modern Schriftstil",
-                Left = 12,
-                Top = 168,
-                Width = 140
-            };
-
-            ComboBox modernNumberStyleComboBox = new ComboBox
-            {
-                Left = 170,
-                Top = 165,
-                Width = 120,
-                DropDownStyle = ComboBoxStyle.DropDownList
-            };
-
-            modernNumberStyleComboBox.Items.Add("Normal");
-            modernNumberStyleComboBox.Items.Add("Fett");
-            modernNumberStyleComboBox.SelectedItem = modernNumberBold ? "Fett" : "Normal";
-
-            modernNumberStyleComboBox.SelectedIndexChanged += (s, args) =>
-            {
-                modernNumberBold = string.Equals(modernNumberStyleComboBox.SelectedItem?.ToString(), "Fett", StringComparison.Ordinal);
-                UpdateOverlayText();
-            };
-
-            Label modernSquareSizeLabel = new Label
-            {
-                Text = "Modern Quadrat",
-                Left = 12,
-                Top = 206,
-                Width = 140
-            };
-
-            NumericUpDown modernSquareSizeUpDown = new NumericUpDown
-            {
-                Left = 170,
-                Top = 203,
                 Width = 120,
                 Minimum = MinModernSquareSize,
                 Maximum = MaxModernSquareSize,
                 Value = modernSquareSize
             };
 
-            modernSquareSizeUpDown.ValueChanged += (s, args) =>
+            boxSizeUpDown.ValueChanged += (s, args) =>
             {
-                modernSquareSize = NormalizeModernSquareSize((int)modernSquareSizeUpDown.Value);
+                modernSquareSize = NormalizeModernSquareSize((int)boxSizeUpDown.Value);
                 UpdateOverlayText();
-            };
-
-            Label modernContentLabel = new Label
-            {
-                Text = "Modern Inhalt (%)",
-                Left = 12,
-                Top = 244,
-                Width = 140
-            };
-
-            TrackBar modernContentTrackBar = new TrackBar
-            {
-                Left = 170,
-                Top = 238,
-                Width = 90,
-                Height = 24,
-                AutoSize = false,
-                Minimum = 0,
-                Maximum = 100,
-                TickFrequency = 10,
-                SmallChange = 1,
-                LargeChange = 10,
-                Value = Math.Max(0, Math.Min(100, modernContentOpacityPercent))
-            };
-
-            Label modernContentValueLabel = new Label
-            {
-                Text = $"{modernContentTrackBar.Value}%",
-                Left = 265,
-                Top = 244,
-                Width = 35
-            };
-
-            modernContentTrackBar.ValueChanged += (s, args) =>
-            {
-                modernContentOpacityPercent = modernContentTrackBar.Value;
-                modernContentValueLabel.Text = $"{modernContentTrackBar.Value}%";
-                RenderLayered();
             };
 
             void UpdateModernControlsEnabled()
             {
-                bool modernSelected = ParseOverlayLayoutMode(layoutComboBox.SelectedItem?.ToString()) == OverlayLayoutMode.Modern;
-                modernNumberFontSizeLabel.Enabled = modernSelected;
-                modernNumberFontSizeUpDown.Enabled = modernSelected;
-                modernNumberStyleLabel.Enabled = modernSelected;
-                modernNumberStyleComboBox.Enabled = modernSelected;
-                modernSquareSizeLabel.Enabled = modernSelected;
-                modernSquareSizeUpDown.Enabled = modernSelected;
-                modernContentLabel.Enabled = modernSelected;
-                modernContentTrackBar.Enabled = modernSelected;
-                modernContentValueLabel.Enabled = modernSelected;
+                bool isModern = ParseOverlayLayoutMode(layoutComboBox.SelectedItem?.ToString()) == OverlayLayoutMode.Modern;
+                boxSizeLabel.Enabled = isModern;
+                boxSizeUpDown.Enabled = isModern;
             }
 
             layoutComboBox.SelectedIndexChanged += (s, args) =>
@@ -446,8 +345,8 @@ namespace EDtoolset
             Button okButton = new Button
             {
                 Text = "OK",
-                Left = 134,
-                Top = 305,
+                Left = 120,
+                Top = 180,
                 Width = 75,
                 Height = 26,
                 DialogResult = DialogResult.OK
@@ -456,8 +355,8 @@ namespace EDtoolset
             Button cancelButton = new Button
             {
                 Text = "Cancel",
-                Left = 215,
-                Top = 305,
+                Left = 200,
+                Top = 180,
                 Width = 75,
                 Height = 26,
                 DialogResult = DialogResult.Cancel
@@ -465,20 +364,13 @@ namespace EDtoolset
 
             configForm.Controls.Add(fontLabel);
             configForm.Controls.Add(fontUpDown);
-            configForm.Controls.Add(bgLabel);
-            configForm.Controls.Add(bgTrackBar);
-            configForm.Controls.Add(bgValueLabel);
+            configForm.Controls.Add(opacityLabel);
+            configForm.Controls.Add(opacityTrackBar);
+            configForm.Controls.Add(opacityValueLabel);
             configForm.Controls.Add(layoutLabel);
             configForm.Controls.Add(layoutComboBox);
-            configForm.Controls.Add(modernNumberFontSizeLabel);
-            configForm.Controls.Add(modernNumberFontSizeUpDown);
-            configForm.Controls.Add(modernNumberStyleLabel);
-            configForm.Controls.Add(modernNumberStyleComboBox);
-            configForm.Controls.Add(modernSquareSizeLabel);
-            configForm.Controls.Add(modernSquareSizeUpDown);
-            configForm.Controls.Add(modernContentLabel);
-            configForm.Controls.Add(modernContentTrackBar);
-            configForm.Controls.Add(modernContentValueLabel);
+            configForm.Controls.Add(boxSizeLabel);
+            configForm.Controls.Add(boxSizeUpDown);
             configForm.Controls.Add(okButton);
             configForm.Controls.Add(cancelButton);
 
@@ -492,12 +384,9 @@ namespace EDtoolset
             if (result == DialogResult.OK)
             {
                 fontSize = (int)fontUpDown.Value;
-                backgroundOpacityPercent = bgTrackBar.Value;
+                backgroundOpacityPercent = opacityTrackBar.Value;
                 overlayLayoutMode = ParseOverlayLayoutMode(layoutComboBox.SelectedItem?.ToString());
-                modernNumberFontSize = NormalizeModernNumberFontSize((int)modernNumberFontSizeUpDown.Value);
-                modernNumberBold = string.Equals(modernNumberStyleComboBox.SelectedItem?.ToString(), "Fett", StringComparison.Ordinal);
-                modernSquareSize = NormalizeModernSquareSize((int)modernSquareSizeUpDown.Value);
-                modernContentOpacityPercent = modernContentTrackBar.Value;
+                modernSquareSize = NormalizeModernSquareSize((int)boxSizeUpDown.Value);
                 SaveSettingsSafe();
                 UpdateOverlayText();
             }
@@ -506,10 +395,7 @@ namespace EDtoolset
                 fontSize = originalFontSize;
                 backgroundOpacityPercent = originalBackgroundOpacityPercent;
                 overlayLayoutMode = originalLayoutMode;
-                modernNumberFontSize = originalModernNumberFontSize;
-                modernNumberBold = originalModernNumberBold;
                 modernSquareSize = originalModernSquareSize;
-                modernContentOpacityPercent = originalModernContentOpacityPercent;
                 Location = originalLocation;
                 UpdateOverlayText();
             }
@@ -531,10 +417,7 @@ namespace EDtoolset
                 fontSize = Math.Max(MinFontSize, Math.Min(MaxFontSize, settings.FontSize));
                 backgroundOpacityPercent = Math.Max(0, Math.Min(100, settings.BackgroundOpacityPercent));
                 overlayLayoutMode = ParseOverlayLayoutMode(settings.LayoutMode);
-                modernNumberFontSize = NormalizeModernNumberFontSize(settings.ModernNumberFontSize);
-                modernNumberBold = settings.ModernNumberBold;
                 modernSquareSize = NormalizeModernSquareSize(settings.ModernSquareSize);
-                modernContentOpacityPercent = Math.Max(0, Math.Min(100, settings.ModernContentOpacityPercent));
                 Location = new Point(settings.LocationX, settings.LocationY);
                 UpdateOverlayBounds();
             }
@@ -543,10 +426,7 @@ namespace EDtoolset
                 fontSize = 11;
                 backgroundOpacityPercent = 0;
                 overlayLayoutMode = OverlayLayoutMode.Classic;
-                modernNumberFontSize = 16;
-                modernNumberBold = true;
                 modernSquareSize = 36;
-                modernContentOpacityPercent = 100;
                 Location = new Point(50, 50);
                 UpdateOverlayBounds();
             }
@@ -573,10 +453,7 @@ namespace EDtoolset
                 LocationX = Left,
                 LocationY = Top,
                 LayoutMode = GetOverlayLayoutModeText(),
-                ModernNumberFontSize = modernNumberFontSize,
-                ModernNumberBold = modernNumberBold,
-                ModernSquareSize = modernSquareSize,
-                ModernContentOpacityPercent = modernContentOpacityPercent
+                ModernSquareSize = modernSquareSize
             };
 
             JsonSerializerOptions options = new JsonSerializerOptions

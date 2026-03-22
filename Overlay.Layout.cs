@@ -27,22 +27,12 @@ namespace EDtoolset
         private const int ModernBottomMargin = 8;
         private const int ModernSideMargin = 8;
 
-        private const int MinModernNumberFontSize = 8;
-        private const int MaxModernNumberFontSize = 36;
         private const int MinModernSquareSize = 10;
         private const int MaxModernSquareSize = 120;
 
         private readonly List<ModernJumpSquare> modernJumpSquares = new List<ModernJumpSquare>();
         private OverlayLayoutMode overlayLayoutMode = OverlayLayoutMode.Classic;
-        private int modernNumberFontSize = 16;
-        private bool modernNumberBold = true;
         private int modernSquareSize = 36;
-        private int modernContentOpacityPercent = 100;
-
-        private int NormalizeModernNumberFontSize(int value)
-        {
-            return Math.Max(MinModernNumberFontSize, Math.Min(MaxModernNumberFontSize, value));
-        }
 
         private int NormalizeModernSquareSize(int value)
         {
@@ -123,28 +113,10 @@ namespace EDtoolset
 
         private Font CreateModernSquareFont()
         {
-            FontFamily family;
+            if (dosisBoldFamily == null)
+                throw new InvalidOperationException("Dosis-Bold.ttf wurde nicht geladen.");
 
-            if (modernNumberBold)
-            {
-                if (dosisBoldFamily == null)
-                    throw new InvalidOperationException("Dosis-Bold.ttf wurde nicht geladen.");
-
-                family = dosisBoldFamily;
-            }
-            else
-            {
-                if (dosisRegularFamily == null)
-                    throw new InvalidOperationException("Dosis-Regular.ttf wurde nicht geladen.");
-
-                family = dosisRegularFamily;
-            }
-
-            return new Font(
-                family,
-                NormalizeModernNumberFontSize(modernNumberFontSize),
-                modernNumberBold ? FontStyle.Bold : FontStyle.Regular,
-                GraphicsUnit.Pixel);
+            return new Font(dosisBoldFamily, fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
         }
 
         private void RenderClassicLayout(Graphics g)
@@ -183,11 +155,12 @@ namespace EDtoolset
         {
             using Font squareFont = CreateModernSquareFont();
 
-            int contentAlpha = (int)Math.Round(255.0 * modernContentOpacityPercent / 100.0);
-            using Brush scoopableBrush = new SolidBrush(Color.FromArgb(contentAlpha, 70, 140, 255));
-            using Brush nonScoopableBrush = new SolidBrush(Color.FromArgb(contentAlpha, 220, 110, 0));
-            using Brush textBrush = new SolidBrush(Color.FromArgb(contentAlpha, 255, 255, 255));
-            using Pen borderPen = new Pen(Color.FromArgb(contentAlpha, 0, 0, 0));
+            int alpha = (int)Math.Round(255.0 * backgroundOpacityPercent / 100.0);
+
+            using Brush scoopableBrush = new SolidBrush(Color.FromArgb(alpha, 70, 140, 255));
+            using Brush nonScoopableBrush = new SolidBrush(Color.FromArgb(alpha, 220, 110, 0));
+            using Brush textBrush = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255));
+            using Pen borderPen = new Pen(Color.FromArgb(alpha, 0, 0, 0));
             using StringFormat stringFormat = new StringFormat
             {
                 Alignment = StringAlignment.Center,
