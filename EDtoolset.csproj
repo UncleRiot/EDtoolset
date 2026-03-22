@@ -6,7 +6,7 @@
 		<Nullable>enable</Nullable>
 		<UseWindowsForms>true</UseWindowsForms>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<ApplicationIcon>favicon.ico</ApplicationIcon>
+		<ApplicationIcon>Ressources\EDtoolset.ico</ApplicationIcon>
 
 		<AssemblyTitle>EDtoolset Overlay</AssemblyTitle>
 		<Product>EDtoolset</Product>
@@ -27,7 +27,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Content Include="favicon.ico" />
+		<Content Include="Ressources\EDtoolset.ico" />
 	</ItemGroup>
 
 	<ItemGroup>
