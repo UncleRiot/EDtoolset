@@ -6,6 +6,9 @@ Lightweight overlay tool for **Elite Dangerous** displaying navigation data dire
 
 <img width="252" height="183" alt="grafik" src="https://github.com/user-attachments/assets/7889ab7c-4964-40ce-8abf-d7178678159a" />
 
+Alternate Layout:
+<img width="153" height="32" alt="grafik" src="https://github.com/user-attachments/assets/61080e48-b875-4ba0-9460-6bfa7ec2b655" />
+
 ---
 
 ## ✨ Features
