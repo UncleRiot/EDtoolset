@@ -15,14 +15,28 @@
 		<Description>Overlay für Elite Dangerous</Description>
 		<Copyright>© Onkel Amok / Uncle Riot</Copyright>
 
-		<Version>0.0.0.4</Version>
-		<AssemblyVersion>0.0.0.4</AssemblyVersion>
-		<FileVersion>0.0.0.4</FileVersion>
-		<InformationalVersion>0.0.0.4</InformationalVersion>
+		<Version>0.1</Version>
+		<AssemblyVersion>0.1</AssemblyVersion>
+		<FileVersion>0.1</FileVersion>
+		<InformationalVersion>0.1</InformationalVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <None Remove="Dosis-Bold.ttf" />
+	  <None Remove="Dosis-Regular.ttf" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<Content Include="favicon.ico" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Include="Dosis-Bold.ttf">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </EmbeddedResource>
+	  <EmbeddedResource Include="Dosis-Regular.ttf">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </EmbeddedResource>
 	</ItemGroup>
 
 	<ItemGroup>

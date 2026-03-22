@@ -7,10 +7,11 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Forms;
+using System.Reflection;
 
 namespace EDtoolset
 {
-    public class Overlay : Form
+    public partial class Overlay : Form
     {
         private readonly System.Windows.Forms.Timer timer;
         private bool dragging = false;
@@ -45,6 +46,10 @@ namespace EDtoolset
         private int fontSize = 11;
         private int backgroundOpacityPercent = 0; // 0 = transparent, 100 = voll deckend
 
+        private readonly PrivateFontCollection privateFonts = new PrivateFontCollection();
+        private FontFamily? dosisRegularFamily;
+        private FontFamily? dosisBoldFamily;
+
         private sealed class RouteEntry
         {
             public string StarSystem { get; set; } = "";
@@ -58,6 +63,11 @@ namespace EDtoolset
             public int BackgroundOpacityPercent { get; set; } = 0;
             public int LocationX { get; set; } = 50;
             public int LocationY { get; set; } = 50;
+            public string LayoutMode { get; set; } = "Classic";
+            public int ModernNumberFontSize { get; set; } = 16;
+            public bool ModernNumberBold { get; set; } = true;
+            public int ModernSquareSize { get; set; } = 36;
+            public int ModernContentOpacityPercent { get; set; } = 100;
         }
 
         public Overlay()
@@ -78,6 +88,7 @@ namespace EDtoolset
             BackColor = Color.Black;
             TransparencyKey = Color.Empty;
 
+            LoadPrivateFonts();
             LoadSettings();
 
             overlayMenu = new ContextMenuStrip();
@@ -188,12 +199,18 @@ namespace EDtoolset
         {
             int originalFontSize = fontSize;
             int originalBackgroundOpacityPercent = backgroundOpacityPercent;
+            OverlayLayoutMode originalLayoutMode = overlayLayoutMode;
+            int originalModernNumberFontSize = modernNumberFontSize;
+            bool originalModernNumberBold = modernNumberBold;
+            int originalModernSquareSize = modernSquareSize;
+            int originalModernContentOpacityPercent = modernContentOpacityPercent;
+            Point originalLocation = Location;
 
             using Form configForm = new Form();
             configForm.Text = "Config";
             configForm.FormBorderStyle = FormBorderStyle.FixedDialog;
             configForm.StartPosition = FormStartPosition.Manual;
-            configForm.ClientSize = new Size(290, 155);
+            configForm.ClientSize = new Size(320, 345);
             configForm.MaximizeBox = false;
             configForm.MinimizeBox = false;
             configForm.ShowInTaskbar = false;
@@ -208,12 +225,12 @@ namespace EDtoolset
                 Text = "Fontsize",
                 Left = 12,
                 Top = 16,
-                Width = 100
+                Width = 140
             };
 
             NumericUpDown fontUpDown = new NumericUpDown
             {
-                Left = 140,
+                Left = 170,
                 Top = 13,
                 Width = 120,
                 Minimum = MinFontSize,
@@ -232,12 +249,12 @@ namespace EDtoolset
                 Text = "Background (%)",
                 Left = 12,
                 Top = 54,
-                Width = 110
+                Width = 140
             };
 
             TrackBar bgTrackBar = new TrackBar
             {
-                Left = 140,
+                Left = 170,
                 Top = 48,
                 Width = 90,
                 Height = 24,
@@ -253,7 +270,7 @@ namespace EDtoolset
             Label bgValueLabel = new Label
             {
                 Text = $"{bgTrackBar.Value}%",
-                Left = 235,
+                Left = 265,
                 Top = 54,
                 Width = 35
             };
@@ -265,11 +282,172 @@ namespace EDtoolset
                 RenderLayered();
             };
 
+            Label layoutLabel = new Label
+            {
+                Text = "Layout",
+                Left = 12,
+                Top = 92,
+                Width = 140
+            };
+
+            ComboBox layoutComboBox = new ComboBox
+            {
+                Left = 170,
+                Top = 89,
+                Width = 120,
+                DropDownStyle = ComboBoxStyle.DropDownList
+            };
+
+            layoutComboBox.Items.Add("Classic");
+            layoutComboBox.Items.Add("Modern");
+            layoutComboBox.SelectedItem = GetOverlayLayoutModeText();
+
+            Label modernNumberFontSizeLabel = new Label
+            {
+                Text = "Modern Zahlgröße",
+                Left = 12,
+                Top = 130,
+                Width = 140
+            };
+
+            NumericUpDown modernNumberFontSizeUpDown = new NumericUpDown
+            {
+                Left = 170,
+                Top = 127,
+                Width = 120,
+                Minimum = MinModernNumberFontSize,
+                Maximum = MaxModernNumberFontSize,
+                Value = modernNumberFontSize
+            };
+
+            modernNumberFontSizeUpDown.ValueChanged += (s, args) =>
+            {
+                modernNumberFontSize = NormalizeModernNumberFontSize((int)modernNumberFontSizeUpDown.Value);
+                UpdateOverlayText();
+            };
+
+            Label modernNumberStyleLabel = new Label
+            {
+                Text = "Modern Schriftstil",
+                Left = 12,
+                Top = 168,
+                Width = 140
+            };
+
+            ComboBox modernNumberStyleComboBox = new ComboBox
+            {
+                Left = 170,
+                Top = 165,
+                Width = 120,
+                DropDownStyle = ComboBoxStyle.DropDownList
+            };
+
+            modernNumberStyleComboBox.Items.Add("Normal");
+            modernNumberStyleComboBox.Items.Add("Fett");
+            modernNumberStyleComboBox.SelectedItem = modernNumberBold ? "Fett" : "Normal";
+
+            modernNumberStyleComboBox.SelectedIndexChanged += (s, args) =>
+            {
+                modernNumberBold = string.Equals(modernNumberStyleComboBox.SelectedItem?.ToString(), "Fett", StringComparison.Ordinal);
+                UpdateOverlayText();
+            };
+
+            Label modernSquareSizeLabel = new Label
+            {
+                Text = "Modern Quadrat",
+                Left = 12,
+                Top = 206,
+                Width = 140
+            };
+
+            NumericUpDown modernSquareSizeUpDown = new NumericUpDown
+            {
+                Left = 170,
+                Top = 203,
+                Width = 120,
+                Minimum = MinModernSquareSize,
+                Maximum = MaxModernSquareSize,
+                Value = modernSquareSize
+            };
+
+            modernSquareSizeUpDown.ValueChanged += (s, args) =>
+            {
+                modernSquareSize = NormalizeModernSquareSize((int)modernSquareSizeUpDown.Value);
+                UpdateOverlayText();
+            };
+
+            Label modernContentLabel = new Label
+            {
+                Text = "Modern Inhalt (%)",
+                Left = 12,
+                Top = 244,
+                Width = 140
+            };
+
+            TrackBar modernContentTrackBar = new TrackBar
+            {
+                Left = 170,
+                Top = 238,
+                Width = 90,
+                Height = 24,
+                AutoSize = false,
+                Minimum = 0,
+                Maximum = 100,
+                TickFrequency = 10,
+                SmallChange = 1,
+                LargeChange = 10,
+                Value = Math.Max(0, Math.Min(100, modernContentOpacityPercent))
+            };
+
+            Label modernContentValueLabel = new Label
+            {
+                Text = $"{modernContentTrackBar.Value}%",
+                Left = 265,
+                Top = 244,
+                Width = 35
+            };
+
+            modernContentTrackBar.ValueChanged += (s, args) =>
+            {
+                modernContentOpacityPercent = modernContentTrackBar.Value;
+                modernContentValueLabel.Text = $"{modernContentTrackBar.Value}%";
+                RenderLayered();
+            };
+
+            void UpdateModernControlsEnabled()
+            {
+                bool modernSelected = ParseOverlayLayoutMode(layoutComboBox.SelectedItem?.ToString()) == OverlayLayoutMode.Modern;
+                modernNumberFontSizeLabel.Enabled = modernSelected;
+                modernNumberFontSizeUpDown.Enabled = modernSelected;
+                modernNumberStyleLabel.Enabled = modernSelected;
+                modernNumberStyleComboBox.Enabled = modernSelected;
+                modernSquareSizeLabel.Enabled = modernSelected;
+                modernSquareSizeUpDown.Enabled = modernSelected;
+                modernContentLabel.Enabled = modernSelected;
+                modernContentTrackBar.Enabled = modernSelected;
+                modernContentValueLabel.Enabled = modernSelected;
+            }
+
+            layoutComboBox.SelectedIndexChanged += (s, args) =>
+            {
+                OverlayLayoutMode selectedLayoutMode = ParseOverlayLayoutMode(layoutComboBox.SelectedItem?.ToString());
+                bool switchedToModern = overlayLayoutMode != selectedLayoutMode &&
+                                        selectedLayoutMode == OverlayLayoutMode.Modern;
+
+                overlayLayoutMode = selectedLayoutMode;
+
+                if (switchedToModern)
+                    CenterModernOverlayTop();
+
+                UpdateModernControlsEnabled();
+                UpdateOverlayText();
+            };
+
             Button okButton = new Button
             {
                 Text = "OK",
-                Left = 104,
-                Top = 108,
+                Left = 134,
+                Top = 305,
                 Width = 75,
                 Height = 26,
                 DialogResult = DialogResult.OK
@@ -278,8 +456,8 @@ namespace EDtoolset
             Button cancelButton = new Button
             {
                 Text = "Cancel",
-                Left = 185,
-                Top = 108,
+                Left = 215,
+                Top = 305,
                 Width = 75,
                 Height = 26,
                 DialogResult = DialogResult.Cancel
@@ -290,11 +468,24 @@ namespace EDtoolset
             configForm.Controls.Add(bgLabel);
             configForm.Controls.Add(bgTrackBar);
             configForm.Controls.Add(bgValueLabel);
+            configForm.Controls.Add(layoutLabel);
+            configForm.Controls.Add(layoutComboBox);
+            configForm.Controls.Add(modernNumberFontSizeLabel);
+            configForm.Controls.Add(modernNumberFontSizeUpDown);
+            configForm.Controls.Add(modernNumberStyleLabel);
+            configForm.Controls.Add(modernNumberStyleComboBox);
+            configForm.Controls.Add(modernSquareSizeLabel);
+            configForm.Controls.Add(modernSquareSizeUpDown);
+            configForm.Controls.Add(modernContentLabel);
+            configForm.Controls.Add(modernContentTrackBar);
+            configForm.Controls.Add(modernContentValueLabel);
             configForm.Controls.Add(okButton);
             configForm.Controls.Add(cancelButton);
 
             configForm.AcceptButton = okButton;
             configForm.CancelButton = cancelButton;
+
+            UpdateModernControlsEnabled();
 
             DialogResult result = configForm.ShowDialog();
 
@@ -302,6 +493,11 @@ namespace EDtoolset
             {
                 fontSize = (int)fontUpDown.Value;
                 backgroundOpacityPercent = bgTrackBar.Value;
+                overlayLayoutMode = ParseOverlayLayoutMode(layoutComboBox.SelectedItem?.ToString());
+                modernNumberFontSize = NormalizeModernNumberFontSize((int)modernNumberFontSizeUpDown.Value);
+                modernNumberBold = string.Equals(modernNumberStyleComboBox.SelectedItem?.ToString(), "Fett", StringComparison.Ordinal);
+                modernSquareSize = NormalizeModernSquareSize((int)modernSquareSizeUpDown.Value);
+                modernContentOpacityPercent = modernContentTrackBar.Value;
                 SaveSettingsSafe();
                 UpdateOverlayText();
             }
@@ -309,6 +505,12 @@ namespace EDtoolset
             {
                 fontSize = originalFontSize;
                 backgroundOpacityPercent = originalBackgroundOpacityPercent;
+                overlayLayoutMode = originalLayoutMode;
+                modernNumberFontSize = originalModernNumberFontSize;
+                modernNumberBold = originalModernNumberBold;
+                modernSquareSize = originalModernSquareSize;
+                modernContentOpacityPercent = originalModernContentOpacityPercent;
+                Location = originalLocation;
                 UpdateOverlayText();
             }
         }
@@ -328,13 +530,25 @@ namespace EDtoolset
 
                 fontSize = Math.Max(MinFontSize, Math.Min(MaxFontSize, settings.FontSize));
                 backgroundOpacityPercent = Math.Max(0, Math.Min(100, settings.BackgroundOpacityPercent));
+                overlayLayoutMode = ParseOverlayLayoutMode(settings.LayoutMode);
+                modernNumberFontSize = NormalizeModernNumberFontSize(settings.ModernNumberFontSize);
+                modernNumberBold = settings.ModernNumberBold;
+                modernSquareSize = NormalizeModernSquareSize(settings.ModernSquareSize);
+                modernContentOpacityPercent = Math.Max(0, Math.Min(100, settings.ModernContentOpacityPercent));
                 Location = new Point(settings.LocationX, settings.LocationY);
+                UpdateOverlayBounds();
             }
             catch
             {
                 fontSize = 11;
                 backgroundOpacityPercent = 0;
+                overlayLayoutMode = OverlayLayoutMode.Classic;
+                modernNumberFontSize = 16;
+                modernNumberBold = true;
+                modernSquareSize = 36;
+                modernContentOpacityPercent = 100;
                 Location = new Point(50, 50);
+                UpdateOverlayBounds();
             }
         }
 
@@ -357,7 +571,12 @@ namespace EDtoolset
                 FontSize = fontSize,
                 BackgroundOpacityPercent = backgroundOpacityPercent,
                 LocationX = Left,
-                LocationY = Top
+                LocationY = Top,
+                LayoutMode = GetOverlayLayoutModeText(),
+                ModernNumberFontSize = modernNumberFontSize,
+                ModernNumberBold = modernNumberBold,
+                ModernSquareSize = modernSquareSize,
+                ModernContentOpacityPercent = modernContentOpacityPercent
             };
 
             JsonSerializerOptions options = new JsonSerializerOptions
@@ -367,6 +586,46 @@ namespace EDtoolset
 
             string json = JsonSerializer.Serialize(settings, options);
             File.WriteAllText(settingsFilePath, json);
+        }
+
+        private void LoadPrivateFonts()
+        {
+            LoadFontFromResource("EDtoolset.Dosis-Regular.ttf", out dosisRegularFamily);
+            LoadFontFromResource("EDtoolset.Dosis-Bold.ttf", out dosisBoldFamily);
+        }
+
+        private void LoadFontFromResource(string resourceName, out FontFamily family)
+        {
+            using Stream? fontStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+            if (fontStream == null)
+                throw new Exception($"Embedded font not found: {resourceName}");
+
+            byte[] fontData = new byte[fontStream.Length];
+            fontStream.Read(fontData, 0, fontData.Length);
+
+            IntPtr fontPtr = Marshal.AllocCoTaskMem(fontData.Length);
+            Marshal.Copy(fontData, 0, fontPtr, fontData.Length);
+
+            privateFonts.AddMemoryFont(fontPtr, fontData.Length);
+            Marshal.FreeCoTaskMem(fontPtr);
+
+            family = privateFonts.Families[privateFonts.Families.Length - 1];
+        }
+
+        private Font CreateJumpsFont()
+        {
+            if (dosisBoldFamily == null)
+                throw new InvalidOperationException("Dosis-Bold.ttf wurde nicht geladen.");
+
+            return new Font(dosisBoldFamily, fontSize, FontStyle.Bold);
+        }
+
+        private Font CreateListFont()
+        {
+            if (dosisRegularFamily == null)
+                throw new InvalidOperationException("Dosis-Regular.ttf wurde nicht geladen.");
+
+            return new Font(dosisRegularFamily, Math.Max(8, fontSize - 2), FontStyle.Regular);
         }
 
         private bool IsScoopable(string starClass)
@@ -608,16 +867,36 @@ namespace EDtoolset
             try
             {
                 starLines.Clear();
+                modernJumpSquares.Clear();
 
                 if (routeEntries.Count == 0)
                 {
                     jumpsText = "Jumps: -";
-                    Height = 40;
+                    UpdateOverlayBounds();
                     RenderLayered();
                     return;
                 }
 
                 int currentIndex = FindCurrentRouteIndex();
+
+                if (overlayLayoutMode == OverlayLayoutMode.Modern)
+                {
+                    if (currentIndex < 0)
+                    {
+                        jumpsText = "Jumps: ?";
+                        BuildModernJumpSquares(-1);
+                    }
+                    else
+                    {
+                        int jumpsRemaining = Math.Max(0, routeEntries.Count - currentIndex - 1);
+                        jumpsText = $"Jumps: {jumpsRemaining}";
+                        BuildModernJumpSquares(currentIndex);
+                    }
+
+                    UpdateOverlayBounds();
+                    RenderLayered();
+                    return;
+                }
 
                 if (currentIndex < 0)
                 {
@@ -630,13 +909,13 @@ namespace EDtoolset
                         starLines.Add($"{i + 1}. {routeEntries[i].StarClass}{marker}");
                     }
 
-                    Height = Math.Max(40, 28 + ((starLines.Count + 2) * GetLineHeight()));
+                    UpdateOverlayBounds();
                     RenderLayered();
                     return;
                 }
 
-                int jumpsRemaining = Math.Max(0, routeEntries.Count - currentIndex - 1);
-                jumpsText = $"Jumps: {jumpsRemaining}";
+                int classicJumpsRemaining = Math.Max(0, routeEntries.Count - currentIndex - 1);
+                jumpsText = $"Jumps: {classicJumpsRemaining}";
 
                 int firstNextJumpIndex = currentIndex + 1;
                 int lastIndexExclusive = Math.Min(routeEntries.Count, firstNextJumpIndex + MaxStarsShown);
@@ -648,13 +927,14 @@ namespace EDtoolset
                     starLines.Add($"{displayNumber}. {routeEntries[i].StarClass}{marker}");
                 }
 
-                Height = Math.Max(40, 28 + ((starLines.Count + 2) * GetLineHeight()));
+                UpdateOverlayBounds();
             }
             catch
             {
                 jumpsText = "Jumps: -";
                 starLines.Clear();
-                Height = 40;
+                modernJumpSquares.Clear();
+                UpdateOverlayBounds();
             }
 
             RenderLayered();
@@ -669,7 +949,7 @@ namespace EDtoolset
             using Graphics g = Graphics.FromImage(bitmap);
 
             g.Clear(Color.Transparent);
-            g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
+            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
             int backgroundAlpha = (int)Math.Round(255.0 * backgroundOpacityPercent / 100.0);
 
@@ -679,34 +959,10 @@ namespace EDtoolset
                 g.FillRectangle(backgroundBrush, ClientRectangle);
             }
 
-            using Brush textBrush = new SolidBrush(Color.FromArgb(255, 220, 110, 0));
-            using Brush markerBrush = new SolidBrush(Color.FromArgb(255, 70, 140, 255));
-            using Font jumpsFont = new Font("Segoe UI", fontSize, FontStyle.Bold);
-            using Font listFont = new Font("Segoe UI", Math.Max(8, fontSize - 2), FontStyle.Regular);
-
-            float y = 2f;
-            g.DrawString(jumpsText, jumpsFont, textBrush, 4f, y);
-
-            y += fontSize + 16f;
-
-            foreach (string line in starLines)
-{
-    if (line.EndsWith("⬥"))
-    {
-        string text = line.Replace(" ⬥", "");
-
-        g.DrawString(text, listFont, textBrush, 4f, y);
-
-        SizeF size = g.MeasureString(text, listFont);
-        g.DrawString(" ⬥", listFont, markerBrush, 4f + size.Width, y);
-    }
-    else
-    {
-        g.DrawString(line, listFont, textBrush, 4f, y);
-    }
-
-    y += GetLineHeight();
-}
+            if (overlayLayoutMode == OverlayLayoutMode.Modern)
+                RenderModernLayout(g);
+            else
+                RenderClassicLayout(g);
 
             ApplyBitmap(bitmap);
         }
